@@ -1,1 +1,16 @@
 project_id = "olstjuzjgxbnytgcpkep"
+
+[functions.generate-thumbnail]
+verify_jwt = false
+
+[functions.generate-titles]
+verify_jwt = false
+
+[functions.face-swap]
+verify_jwt = false
+
+[functions.edit-thumbnail]
+verify_jwt = false
+
+[functions.upload-to-cloudinary]
+verify_jwt = false
