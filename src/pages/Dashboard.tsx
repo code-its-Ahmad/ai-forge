@@ -9,6 +9,9 @@ import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Navbar } from '@/components/Navbar';
+import { YouTubeAnalyzer } from '@/components/dashboard/YouTubeAnalyzer';
+import { ThumbnailScorer } from '@/components/dashboard/ThumbnailScorer';
+import { ABTester } from '@/components/dashboard/ABTester';
 import { toast } from 'sonner';
 import { 
   Sparkles, 
@@ -23,7 +26,11 @@ import {
   Users,
   Palette,
   Upload,
-  RefreshCw
+  RefreshCw,
+  Youtube,
+  BarChart3,
+  FlipHorizontal,
+  Link2
 } from 'lucide-react';
 
 interface Generation {
@@ -40,6 +47,9 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const location = useLocation();
   const { user, profile, loading: authLoading, refreshProfile } = useAuth();
+  
+  // Active tab
+  const [activeTab, setActiveTab] = useState('thumbnail');
   
   // Thumbnail generation
   const [prompt, setPrompt] = useState('');
@@ -69,6 +79,11 @@ export default function Dashboard() {
   const [editing, setEditing] = useState(false);
   const [editedImage, setEditedImage] = useState<string | null>(null);
   const editInputRef = useRef<HTMLInputElement>(null);
+  
+  // YouTube to Thumbnail
+  const [youtubeUrl, setYoutubeUrl] = useState('');
+  const [generatingFromYT, setGeneratingFromYT] = useState(false);
+  const [ytResult, setYtResult] = useState<any>(null);
   
   // History
   const [generations, setGenerations] = useState<Generation[]>([]);
@@ -338,6 +353,56 @@ export default function Dashboard() {
     }
   };
 
+  const handleGenerateFromYouTube = async () => {
+    if (!youtubeUrl.trim()) {
+      toast.error('Please enter a YouTube URL');
+      return;
+    }
+    if (!checkUsageLimit()) return;
+
+    setGeneratingFromYT(true);
+    setYtResult(null);
+
+    try {
+      const { data, error } = await supabase.functions.invoke('generate-from-youtube', {
+        body: { 
+          youtubeUrl,
+          style,
+          generateTitles: true
+        }
+      });
+
+      if (error) throw error;
+      if (data.error) throw new Error(data.error);
+
+      setYtResult(data);
+
+      // Save to database
+      if (data.generatedThumbnail) {
+        await supabase.from('generations').insert({
+          user_id: user!.id,
+          generation_type: 'thumbnail',
+          prompt: `Generated from YouTube: ${youtubeUrl}`,
+          image_url: data.generatedThumbnail,
+          platform: 'youtube',
+          title_suggestions: data.titles,
+          metadata: { videoId: data.videoId, analysis: data.analysis }
+        });
+
+        await supabase.rpc('increment_usage', { user_uuid: user!.id });
+        await refreshProfile();
+        await fetchGenerations();
+      }
+
+      toast.success('Generated improved thumbnail from YouTube!');
+    } catch (error) {
+      console.error('Error generating from YouTube:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to generate');
+    } finally {
+      setGeneratingFromYT(false);
+    }
+  };
+
   const handleDownload = async (imageUrl: string, filename?: string) => {
     try {
       const response = await fetch(imageUrl);
@@ -373,6 +438,7 @@ export default function Dashboard() {
 
   const useImageForEdit = (imageUrl: string) => {
     setEditImageUrl(imageUrl);
+    setActiveTab('edit');
     toast.success('Image loaded for editing');
   };
 
@@ -415,27 +481,43 @@ export default function Dashboard() {
           </div>
         </div>
 
-        <Tabs defaultValue="thumbnail" className="space-y-6">
-          <TabsList className="glass p-1 flex-wrap h-auto">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+          <TabsList className="glass p-1 flex-wrap h-auto gap-1">
             <TabsTrigger value="thumbnail" className="gap-2">
               <ImageIcon className="w-4 h-4" />
-              Thumbnail
+              <span className="hidden sm:inline">Thumbnail</span>
+            </TabsTrigger>
+            <TabsTrigger value="youtube-gen" className="gap-2">
+              <Link2 className="w-4 h-4" />
+              <span className="hidden sm:inline">YouTube → Thumb</span>
             </TabsTrigger>
             <TabsTrigger value="titles" className="gap-2">
               <Type className="w-4 h-4" />
-              Titles
+              <span className="hidden sm:inline">Titles</span>
             </TabsTrigger>
             <TabsTrigger value="faceswap" className="gap-2">
               <Users className="w-4 h-4" />
-              Face Swap
+              <span className="hidden sm:inline">Face Swap</span>
             </TabsTrigger>
             <TabsTrigger value="edit" className="gap-2">
               <Palette className="w-4 h-4" />
-              Edit
+              <span className="hidden sm:inline">Edit</span>
+            </TabsTrigger>
+            <TabsTrigger value="analyze" className="gap-2">
+              <Youtube className="w-4 h-4" />
+              <span className="hidden sm:inline">Analyze</span>
+            </TabsTrigger>
+            <TabsTrigger value="score" className="gap-2">
+              <BarChart3 className="w-4 h-4" />
+              <span className="hidden sm:inline">Score</span>
+            </TabsTrigger>
+            <TabsTrigger value="abtest" className="gap-2">
+              <FlipHorizontal className="w-4 h-4" />
+              <span className="hidden sm:inline">A/B Test</span>
             </TabsTrigger>
             <TabsTrigger value="history" className="gap-2">
               <History className="w-4 h-4" />
-              History
+              <span className="hidden sm:inline">History</span>
             </TabsTrigger>
           </TabsList>
 
@@ -554,6 +636,162 @@ export default function Dashboard() {
                       <Palette className="w-4 h-4 mr-2" />
                       Edit
                     </Button>
+                  </div>
+                )}
+              </div>
+            </div>
+          </TabsContent>
+
+          {/* YouTube to Thumbnail */}
+          <TabsContent value="youtube-gen" className="space-y-6">
+            <div className="grid lg:grid-cols-2 gap-6">
+              <div className="glass rounded-2xl p-6 space-y-4">
+                <h2 className="font-display text-xl font-semibold flex items-center gap-2">
+                  <Link2 className="w-5 h-5 text-primary" />
+                  Generate from YouTube Link
+                </h2>
+                <p className="text-sm text-muted-foreground">
+                  Paste any YouTube URL and we'll analyze the current thumbnail, then generate an improved version with matching titles.
+                </p>
+
+                <div className="space-y-2">
+                  <Label>YouTube Video URL</Label>
+                  <Input
+                    placeholder="https://youtube.com/watch?v=... or https://youtu.be/..."
+                    value={youtubeUrl}
+                    onChange={(e) => setYoutubeUrl(e.target.value)}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Style</Label>
+                  <Select value={style} onValueChange={setStyle}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="professional">Professional</SelectItem>
+                      <SelectItem value="bold">Bold & Dramatic</SelectItem>
+                      <SelectItem value="minimal">Minimal</SelectItem>
+                      <SelectItem value="gaming">Gaming</SelectItem>
+                      <SelectItem value="cinematic">Cinematic</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <Button 
+                  onClick={handleGenerateFromYouTube}
+                  variant="mint"
+                  className="w-full"
+                  size="lg"
+                  disabled={generatingFromYT}
+                >
+                  {generatingFromYT ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Analyzing & Generating...
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="w-4 h-4" />
+                      Generate Better Thumbnail
+                    </>
+                  )}
+                </Button>
+              </div>
+
+              {/* Results */}
+              <div className="space-y-4">
+                {ytResult && (
+                  <>
+                    {/* Before/After */}
+                    <div className="glass rounded-2xl p-6">
+                      <h3 className="font-display text-lg font-semibold mb-4">Before & After</h3>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <p className="text-xs text-muted-foreground mb-2">Original</p>
+                          <div className="aspect-video rounded-lg overflow-hidden bg-surface-2">
+                            <img src={ytResult.originalThumbnail} alt="Original" className="w-full h-full object-cover" />
+                          </div>
+                        </div>
+                        <div>
+                          <p className="text-xs text-muted-foreground mb-2">AI Generated</p>
+                          <div className="aspect-video rounded-lg overflow-hidden bg-surface-2">
+                            {ytResult.generatedThumbnail ? (
+                              <img src={ytResult.generatedThumbnail} alt="Generated" className="w-full h-full object-cover" />
+                            ) : (
+                              <div className="flex items-center justify-center h-full text-muted-foreground">
+                                No image generated
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                      {ytResult.generatedThumbnail && (
+                        <div className="flex gap-2 mt-4">
+                          <Button 
+                            onClick={() => handleDownload(ytResult.generatedThumbnail)}
+                            variant="outline"
+                            className="flex-1"
+                          >
+                            <Download className="w-4 h-4 mr-2" />
+                            Download New
+                          </Button>
+                          <Button 
+                            onClick={() => useImageForEdit(ytResult.generatedThumbnail)}
+                            variant="outline"
+                            className="flex-1"
+                          >
+                            <Palette className="w-4 h-4 mr-2" />
+                            Edit
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Analysis */}
+                    {ytResult.analysis && (
+                      <div className="glass rounded-2xl p-6">
+                        <h3 className="font-display text-lg font-semibold mb-3">Video Analysis</h3>
+                        <p className="text-sm"><strong>Topic:</strong> {ytResult.analysis.videoTopic}</p>
+                        {ytResult.analysis.improvedConcept && (
+                          <p className="text-sm mt-2"><strong>Improvement:</strong> {ytResult.analysis.improvedConcept}</p>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Generated Titles */}
+                    {ytResult.titles && ytResult.titles.length > 0 && (
+                      <div className="glass rounded-2xl p-6">
+                        <h3 className="font-display text-lg font-semibold mb-3">Suggested Titles</h3>
+                        <div className="space-y-2">
+                          {ytResult.titles.map((item: any, i: number) => (
+                            <div key={i} className="p-3 rounded-lg bg-surface-2 flex items-center justify-between group">
+                              <div>
+                                <p className="text-sm font-medium">{item.title}</p>
+                                <span className={`text-xs px-2 py-0.5 rounded-full ${
+                                  item.estimatedCTR === 'high' ? 'bg-green-500/20 text-green-400' :
+                                  item.estimatedCTR === 'medium' ? 'bg-yellow-500/20 text-yellow-400' :
+                                  'bg-muted text-muted-foreground'
+                                }`}>
+                                  {item.estimatedCTR} CTR
+                                </span>
+                              </div>
+                              <Button size="sm" variant="ghost" onClick={() => handleCopyTitle(item.title)}>
+                                <Copy className="w-4 h-4" />
+                              </Button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
+
+                {!ytResult && !generatingFromYT && (
+                  <div className="glass rounded-2xl p-6 text-center">
+                    <Youtube className="w-16 h-16 mx-auto mb-4 text-muted-foreground opacity-30" />
+                    <p className="text-muted-foreground">Enter a YouTube URL to generate an improved thumbnail</p>
                   </div>
                 )}
               </div>
@@ -932,7 +1170,6 @@ export default function Dashboard() {
                       onClick={() => {
                         setEditImageUrl(editedImage);
                         setEditedImage(null);
-                        toast.success('Image ready for more edits');
                       }}
                       variant="outline"
                       className="flex-1"
@@ -946,76 +1183,93 @@ export default function Dashboard() {
             </div>
           </TabsContent>
 
+          {/* YouTube Analyzer */}
+          <TabsContent value="analyze">
+            <YouTubeAnalyzer 
+              onUseForEdit={useImageForEdit}
+              onGenerateImproved={(analysis) => {
+                setYoutubeUrl(`https://youtube.com/watch?v=${analysis.videoId}`);
+                setActiveTab('youtube-gen');
+              }}
+            />
+          </TabsContent>
+
+          {/* Thumbnail Scorer */}
+          <TabsContent value="score">
+            <ThumbnailScorer />
+          </TabsContent>
+
+          {/* A/B Tester */}
+          <TabsContent value="abtest">
+            <ABTester />
+          </TabsContent>
+
           {/* History */}
           <TabsContent value="history" className="space-y-6">
             <div className="glass rounded-2xl p-6">
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="font-display text-xl font-semibold flex items-center gap-2">
-                  <History className="w-5 h-5 text-primary" />
-                  Generation History
-                </h2>
-                <Button variant="outline" size="sm" onClick={fetchGenerations}>
-                  <RefreshCw className="w-4 h-4 mr-2" />
-                  Refresh
-                </Button>
-              </div>
+              <h2 className="font-display text-xl font-semibold mb-4 flex items-center gap-2">
+                <History className="w-5 h-5 text-primary" />
+                Generation History
+              </h2>
               
               {loadingHistory ? (
                 <div className="text-center py-12">
                   <Loader2 className="w-8 h-8 animate-spin text-primary mx-auto" />
                 </div>
               ) : generations.length > 0 ? (
-                <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
                   {generations.map((gen) => (
-                    <div 
-                      key={gen.id}
-                      className="rounded-xl bg-surface-2 border border-border overflow-hidden group"
-                    >
+                    <div key={gen.id} className="rounded-xl bg-surface-2 border border-border overflow-hidden group">
                       {gen.image_url ? (
-                        <div className="aspect-video relative">
+                        <div className="aspect-video bg-surface-3">
                           <img 
                             src={gen.image_url} 
                             alt={gen.prompt || 'Generated'} 
                             className="w-full h-full object-cover"
                           />
-                          <div className="absolute inset-0 bg-background/80 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
-                            <Button
-                              size="sm"
-                              variant="secondary"
-                              onClick={() => handleDownload(gen.image_url!)}
-                            >
-                              <Download className="w-4 h-4" />
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="secondary"
-                              onClick={() => useImageForEdit(gen.image_url!)}
-                            >
-                              <Palette className="w-4 h-4" />
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="destructive"
-                              onClick={() => handleDeleteGeneration(gen.id)}
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </Button>
-                          </div>
                         </div>
                       ) : (
-                        <div className="aspect-video bg-surface-1 flex items-center justify-center">
+                        <div className="aspect-video bg-surface-3 flex items-center justify-center">
                           <Type className="w-8 h-8 text-muted-foreground" />
                         </div>
                       )}
                       <div className="p-3">
-                        <p className="text-sm font-medium line-clamp-1">{gen.prompt || 'Generation'}</p>
-                        <div className="flex items-center justify-between mt-1">
-                          <span className="text-xs text-muted-foreground capitalize">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-xs px-2 py-0.5 rounded-full bg-primary/20 text-primary capitalize">
                             {gen.generation_type}
                           </span>
                           <span className="text-xs text-muted-foreground">
                             {new Date(gen.created_at).toLocaleDateString()}
                           </span>
+                        </div>
+                        <p className="text-sm text-muted-foreground truncate">{gen.prompt}</p>
+                        <div className="flex gap-1 mt-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                          {gen.image_url && (
+                            <>
+                              <Button 
+                                size="sm" 
+                                variant="ghost"
+                                onClick={() => handleDownload(gen.image_url!)}
+                              >
+                                <Download className="w-3 h-3" />
+                              </Button>
+                              <Button 
+                                size="sm" 
+                                variant="ghost"
+                                onClick={() => useImageForEdit(gen.image_url!)}
+                              >
+                                <Palette className="w-3 h-3" />
+                              </Button>
+                            </>
+                          )}
+                          <Button 
+                            size="sm" 
+                            variant="ghost"
+                            className="text-destructive hover:text-destructive"
+                            onClick={() => handleDeleteGeneration(gen.id)}
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </Button>
                         </div>
                       </div>
                     </div>
@@ -1024,8 +1278,7 @@ export default function Dashboard() {
               ) : (
                 <div className="text-center py-12 text-muted-foreground">
                   <History className="w-16 h-16 mx-auto mb-4 opacity-30" />
-                  <p>No generations yet</p>
-                  <p className="text-sm">Start creating to see your history here</p>
+                  <p>No generations yet. Start creating!</p>
                 </div>
               )}
             </div>
