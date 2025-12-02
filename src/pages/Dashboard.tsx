@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
@@ -19,8 +19,11 @@ import {
   Image as ImageIcon,
   Type,
   History,
-  BarChart3,
-  Trash2
+  Trash2,
+  Users,
+  Palette,
+  Upload,
+  RefreshCw
 } from 'lucide-react';
 
 interface Generation {
@@ -38,17 +41,36 @@ export default function Dashboard() {
   const location = useLocation();
   const { user, profile, loading: authLoading, refreshProfile } = useAuth();
   
+  // Thumbnail generation
   const [prompt, setPrompt] = useState('');
   const [platform, setPlatform] = useState('youtube');
   const [style, setStyle] = useState('professional');
   const [generating, setGenerating] = useState(false);
   const [generatedImage, setGeneratedImage] = useState<string | null>(null);
   
+  // Title generation
   const [titleTopic, setTitleTopic] = useState('');
   const [titlePlatform, setTitlePlatform] = useState('YouTube');
   const [generatingTitles, setGeneratingTitles] = useState(false);
   const [generatedTitles, setGeneratedTitles] = useState<any[]>([]);
   
+  // Face swap
+  const [sourceImage, setSourceImage] = useState<string>('');
+  const [faceImage, setFaceImage] = useState<string>('');
+  const [swapping, setSwapping] = useState(false);
+  const [swappedImage, setSwappedImage] = useState<string | null>(null);
+  const sourceInputRef = useRef<HTMLInputElement>(null);
+  const faceInputRef = useRef<HTMLInputElement>(null);
+  
+  // Edit thumbnail
+  const [editImageUrl, setEditImageUrl] = useState<string>('');
+  const [editPrompt, setEditPrompt] = useState('');
+  const [editType, setEditType] = useState('enhance');
+  const [editing, setEditing] = useState(false);
+  const [editedImage, setEditedImage] = useState<string | null>(null);
+  const editInputRef = useRef<HTMLInputElement>(null);
+  
+  // History
   const [generations, setGenerations] = useState<Generation[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(true);
 
@@ -98,6 +120,41 @@ export default function Dashboard() {
       return false;
     }
     return true;
+  };
+
+  const handleFileToBase64 = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const handleImageUpload = async (
+    event: React.ChangeEvent<HTMLInputElement>,
+    setImage: (url: string) => void
+  ) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      toast.error('Please upload an image file');
+      return;
+    }
+
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error('Image must be less than 10MB');
+      return;
+    }
+
+    try {
+      const base64 = await handleFileToBase64(file);
+      setImage(base64);
+      toast.success('Image uploaded successfully');
+    } catch {
+      toast.error('Failed to upload image');
+    }
   };
 
   const handleGenerateThumbnail = async () => {
@@ -187,14 +244,108 @@ export default function Dashboard() {
     }
   };
 
-  const handleDownload = async (imageUrl: string) => {
+  const handleFaceSwap = async () => {
+    if (!sourceImage || !faceImage) {
+      toast.error('Please upload both images');
+      return;
+    }
+    if (!checkUsageLimit()) return;
+
+    setSwapping(true);
+    setSwappedImage(null);
+
+    try {
+      const { data, error } = await supabase.functions.invoke('face-swap', {
+        body: { 
+          sourceImageUrl: sourceImage,
+          targetFaceUrl: faceImage
+        }
+      });
+
+      if (error) throw error;
+      if (data.error) throw new Error(data.error);
+
+      setSwappedImage(data.imageUrl);
+
+      // Save to database
+      await supabase.from('generations').insert({
+        user_id: user!.id,
+        generation_type: 'faceswap',
+        prompt: 'Face swap',
+        image_url: data.imageUrl,
+        platform: 'general',
+      });
+
+      // Increment usage
+      await supabase.rpc('increment_usage', { user_uuid: user!.id });
+      await refreshProfile();
+      await fetchGenerations();
+
+      toast.success('Face swap completed!');
+    } catch (error) {
+      console.error('Error in face swap:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to perform face swap');
+    } finally {
+      setSwapping(false);
+    }
+  };
+
+  const handleEditThumbnail = async () => {
+    if (!editImageUrl) {
+      toast.error('Please upload or provide an image');
+      return;
+    }
+    if (!checkUsageLimit()) return;
+
+    setEditing(true);
+    setEditedImage(null);
+
+    try {
+      const { data, error } = await supabase.functions.invoke('edit-thumbnail', {
+        body: { 
+          imageUrl: editImageUrl,
+          editPrompt,
+          editType
+        }
+      });
+
+      if (error) throw error;
+      if (data.error) throw new Error(data.error);
+
+      setEditedImage(data.imageUrl);
+
+      // Save to database
+      await supabase.from('generations').insert({
+        user_id: user!.id,
+        generation_type: 'edit',
+        prompt: editPrompt || editType,
+        image_url: data.imageUrl,
+        platform: 'general',
+        metadata: { editType }
+      });
+
+      // Increment usage
+      await supabase.rpc('increment_usage', { user_uuid: user!.id });
+      await refreshProfile();
+      await fetchGenerations();
+
+      toast.success('Thumbnail edited successfully!');
+    } catch (error) {
+      console.error('Error editing thumbnail:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to edit thumbnail');
+    } finally {
+      setEditing(false);
+    }
+  };
+
+  const handleDownload = async (imageUrl: string, filename?: string) => {
     try {
       const response = await fetch(imageUrl);
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `thumbforge-${Date.now()}.png`;
+      a.download = filename || `thumbforge-${Date.now()}.png`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -218,6 +369,11 @@ export default function Dashboard() {
       toast.success('Deleted successfully');
       await fetchGenerations();
     }
+  };
+
+  const useImageForEdit = (imageUrl: string) => {
+    setEditImageUrl(imageUrl);
+    toast.success('Image loaded for editing');
   };
 
   if (authLoading) {
@@ -260,7 +416,7 @@ export default function Dashboard() {
         </div>
 
         <Tabs defaultValue="thumbnail" className="space-y-6">
-          <TabsList className="glass p-1">
+          <TabsList className="glass p-1 flex-wrap h-auto">
             <TabsTrigger value="thumbnail" className="gap-2">
               <ImageIcon className="w-4 h-4" />
               Thumbnail
@@ -268,6 +424,14 @@ export default function Dashboard() {
             <TabsTrigger value="titles" className="gap-2">
               <Type className="w-4 h-4" />
               Titles
+            </TabsTrigger>
+            <TabsTrigger value="faceswap" className="gap-2">
+              <Users className="w-4 h-4" />
+              Face Swap
+            </TabsTrigger>
+            <TabsTrigger value="edit" className="gap-2">
+              <Palette className="w-4 h-4" />
+              Edit
             </TabsTrigger>
             <TabsTrigger value="history" className="gap-2">
               <History className="w-4 h-4" />
@@ -305,6 +469,8 @@ export default function Dashboard() {
                         <SelectItem value="youtube">YouTube</SelectItem>
                         <SelectItem value="instagram">Instagram</SelectItem>
                         <SelectItem value="tiktok">TikTok</SelectItem>
+                        <SelectItem value="facebook">Facebook</SelectItem>
+                        <SelectItem value="twitter">Twitter</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -320,6 +486,7 @@ export default function Dashboard() {
                         <SelectItem value="minimal">Minimal</SelectItem>
                         <SelectItem value="gaming">Gaming</SelectItem>
                         <SelectItem value="lifestyle">Lifestyle</SelectItem>
+                        <SelectItem value="cinematic">Cinematic</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -380,15 +547,12 @@ export default function Dashboard() {
                       Download
                     </Button>
                     <Button 
-                      onClick={() => {
-                        navigator.clipboard.writeText(generatedImage);
-                        toast.success('Image URL copied!');
-                      }}
+                      onClick={() => useImageForEdit(generatedImage)}
                       variant="outline"
                       className="flex-1"
                     >
-                      <Copy className="w-4 h-4 mr-2" />
-                      Copy URL
+                      <Palette className="w-4 h-4 mr-2" />
+                      Edit
                     </Button>
                   </div>
                 )}
@@ -425,6 +589,8 @@ export default function Dashboard() {
                       <SelectItem value="YouTube">YouTube</SelectItem>
                       <SelectItem value="TikTok">TikTok</SelectItem>
                       <SelectItem value="Instagram">Instagram</SelectItem>
+                      <SelectItem value="Facebook">Facebook</SelectItem>
+                      <SelectItem value="Twitter">Twitter</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -460,7 +626,7 @@ export default function Dashboard() {
                     <p className="text-muted-foreground">Creating viral titles...</p>
                   </div>
                 ) : generatedTitles.length > 0 ? (
-                  <div className="space-y-3">
+                  <div className="space-y-3 max-h-[400px] overflow-y-auto">
                     {generatedTitles.map((item, index) => (
                       <div 
                         key={index}
@@ -480,9 +646,9 @@ export default function Dashboard() {
                               {item.estimatedCTR} CTR
                             </span>
                           </div>
-                          <Button 
-                            variant="ghost" 
-                            size="icon"
+                          <Button
+                            size="sm"
+                            variant="ghost"
                             onClick={() => handleCopyTitle(item.title)}
                             className="opacity-0 group-hover:opacity-100 transition-opacity"
                           >
@@ -495,7 +661,285 @@ export default function Dashboard() {
                 ) : (
                   <div className="text-center py-12 text-muted-foreground">
                     <Type className="w-16 h-16 mx-auto mb-4 opacity-30" />
-                    <p>Title suggestions will appear here</p>
+                    <p>Your titles will appear here</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          </TabsContent>
+
+          {/* Face Swap */}
+          <TabsContent value="faceswap" className="space-y-6">
+            <div className="grid lg:grid-cols-2 gap-6">
+              <div className="glass rounded-2xl p-6 space-y-4">
+                <h2 className="font-display text-xl font-semibold flex items-center gap-2">
+                  <Users className="w-5 h-5 text-primary" />
+                  AI Face Swap
+                </h2>
+
+                <div className="space-y-4">
+                  {/* Source Image */}
+                  <div className="space-y-2">
+                    <Label>Source Image (Thumbnail)</Label>
+                    <div 
+                      className="border-2 border-dashed border-border rounded-xl p-4 text-center cursor-pointer hover:border-primary/50 transition-colors"
+                      onClick={() => sourceInputRef.current?.click()}
+                    >
+                      {sourceImage ? (
+                        <img src={sourceImage} alt="Source" className="max-h-32 mx-auto rounded-lg" />
+                      ) : (
+                        <>
+                          <Upload className="w-8 h-8 mx-auto mb-2 text-muted-foreground" />
+                          <p className="text-sm text-muted-foreground">Click to upload thumbnail</p>
+                        </>
+                      )}
+                    </div>
+                    <input
+                      ref={sourceInputRef}
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={(e) => handleImageUpload(e, setSourceImage)}
+                    />
+                    <Input
+                      placeholder="Or paste image URL"
+                      value={sourceImage.startsWith('data:') ? '' : sourceImage}
+                      onChange={(e) => setSourceImage(e.target.value)}
+                    />
+                  </div>
+
+                  {/* Face Image */}
+                  <div className="space-y-2">
+                    <Label>Face Image (Your Face)</Label>
+                    <div 
+                      className="border-2 border-dashed border-border rounded-xl p-4 text-center cursor-pointer hover:border-primary/50 transition-colors"
+                      onClick={() => faceInputRef.current?.click()}
+                    >
+                      {faceImage ? (
+                        <img src={faceImage} alt="Face" className="max-h-32 mx-auto rounded-lg" />
+                      ) : (
+                        <>
+                          <Upload className="w-8 h-8 mx-auto mb-2 text-muted-foreground" />
+                          <p className="text-sm text-muted-foreground">Click to upload face</p>
+                        </>
+                      )}
+                    </div>
+                    <input
+                      ref={faceInputRef}
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={(e) => handleImageUpload(e, setFaceImage)}
+                    />
+                    <Input
+                      placeholder="Or paste image URL"
+                      value={faceImage.startsWith('data:') ? '' : faceImage}
+                      onChange={(e) => setFaceImage(e.target.value)}
+                    />
+                  </div>
+                </div>
+
+                <Button 
+                  onClick={handleFaceSwap}
+                  variant="mint"
+                  className="w-full"
+                  size="lg"
+                  disabled={swapping || !sourceImage || !faceImage}
+                >
+                  {swapping ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Swapping Faces...
+                    </>
+                  ) : (
+                    <>
+                      <RefreshCw className="w-4 h-4" />
+                      Swap Faces
+                    </>
+                  )}
+                </Button>
+              </div>
+
+              {/* Face Swap Result */}
+              <div className="glass rounded-2xl p-6">
+                <h2 className="font-display text-xl font-semibold mb-4">Result</h2>
+                <div className="aspect-video rounded-xl bg-surface-2 border border-border overflow-hidden flex items-center justify-center">
+                  {swapping ? (
+                    <div className="text-center">
+                      <Loader2 className="w-12 h-12 animate-spin text-primary mx-auto mb-4" />
+                      <p className="text-muted-foreground">Processing face swap...</p>
+                      <p className="text-xs text-muted-foreground mt-1">This may take up to 60 seconds</p>
+                    </div>
+                  ) : swappedImage ? (
+                    <img 
+                      src={swappedImage} 
+                      alt="Face swapped result" 
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <div className="text-center text-muted-foreground">
+                      <Users className="w-16 h-16 mx-auto mb-4 opacity-30" />
+                      <p>Your result will appear here</p>
+                    </div>
+                  )}
+                </div>
+                
+                {swappedImage && (
+                  <div className="flex gap-2 mt-4">
+                    <Button 
+                      onClick={() => handleDownload(swappedImage, 'faceswap-result.png')}
+                      variant="outline"
+                      className="flex-1"
+                    >
+                      <Download className="w-4 h-4 mr-2" />
+                      Download
+                    </Button>
+                    <Button 
+                      onClick={() => useImageForEdit(swappedImage)}
+                      variant="outline"
+                      className="flex-1"
+                    >
+                      <Palette className="w-4 h-4 mr-2" />
+                      Edit
+                    </Button>
+                  </div>
+                )}
+              </div>
+            </div>
+          </TabsContent>
+
+          {/* Edit Thumbnail */}
+          <TabsContent value="edit" className="space-y-6">
+            <div className="grid lg:grid-cols-2 gap-6">
+              <div className="glass rounded-2xl p-6 space-y-4">
+                <h2 className="font-display text-xl font-semibold flex items-center gap-2">
+                  <Palette className="w-5 h-5 text-primary" />
+                  Edit Thumbnail
+                </h2>
+
+                <div className="space-y-2">
+                  <Label>Image to Edit</Label>
+                  <div 
+                    className="border-2 border-dashed border-border rounded-xl p-4 text-center cursor-pointer hover:border-primary/50 transition-colors"
+                    onClick={() => editInputRef.current?.click()}
+                  >
+                    {editImageUrl ? (
+                      <img src={editImageUrl} alt="To edit" className="max-h-32 mx-auto rounded-lg" />
+                    ) : (
+                      <>
+                        <Upload className="w-8 h-8 mx-auto mb-2 text-muted-foreground" />
+                        <p className="text-sm text-muted-foreground">Click to upload or use generated image</p>
+                      </>
+                    )}
+                  </div>
+                  <input
+                    ref={editInputRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(e) => handleImageUpload(e, setEditImageUrl)}
+                  />
+                  <Input
+                    placeholder="Or paste image URL"
+                    value={editImageUrl.startsWith('data:') ? '' : editImageUrl}
+                    onChange={(e) => setEditImageUrl(e.target.value)}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Edit Type</Label>
+                  <Select value={editType} onValueChange={setEditType}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="enhance">Enhance & Improve</SelectItem>
+                      <SelectItem value="text_overlay">Add Text Overlay</SelectItem>
+                      <SelectItem value="background_change">Change Background</SelectItem>
+                      <SelectItem value="style_transfer">Apply Style</SelectItem>
+                      <SelectItem value="color_grade">Color Grading</SelectItem>
+                      <SelectItem value="remove_background">Remove Background</SelectItem>
+                      <SelectItem value="add_effects">Add Effects</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Edit Instructions (Optional)</Label>
+                  <Textarea
+                    placeholder="Describe what changes you want..."
+                    value={editPrompt}
+                    onChange={(e) => setEditPrompt(e.target.value)}
+                    className="min-h-[80px]"
+                  />
+                </div>
+
+                <Button 
+                  onClick={handleEditThumbnail}
+                  variant="mint"
+                  className="w-full"
+                  size="lg"
+                  disabled={editing || !editImageUrl}
+                >
+                  {editing ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Editing...
+                    </>
+                  ) : (
+                    <>
+                      <Wand2 className="w-4 h-4" />
+                      Apply Edits
+                    </>
+                  )}
+                </Button>
+              </div>
+
+              {/* Edit Result */}
+              <div className="glass rounded-2xl p-6">
+                <h2 className="font-display text-xl font-semibold mb-4">Edited Result</h2>
+                <div className="aspect-video rounded-xl bg-surface-2 border border-border overflow-hidden flex items-center justify-center">
+                  {editing ? (
+                    <div className="text-center">
+                      <Loader2 className="w-12 h-12 animate-spin text-primary mx-auto mb-4" />
+                      <p className="text-muted-foreground">Applying edits...</p>
+                    </div>
+                  ) : editedImage ? (
+                    <img 
+                      src={editedImage} 
+                      alt="Edited thumbnail" 
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <div className="text-center text-muted-foreground">
+                      <Palette className="w-16 h-16 mx-auto mb-4 opacity-30" />
+                      <p>Your edited image will appear here</p>
+                    </div>
+                  )}
+                </div>
+                
+                {editedImage && (
+                  <div className="flex gap-2 mt-4">
+                    <Button 
+                      onClick={() => handleDownload(editedImage, 'edited-thumbnail.png')}
+                      variant="outline"
+                      className="flex-1"
+                    >
+                      <Download className="w-4 h-4 mr-2" />
+                      Download
+                    </Button>
+                    <Button 
+                      onClick={() => {
+                        setEditImageUrl(editedImage);
+                        setEditedImage(null);
+                        toast.success('Image ready for more edits');
+                      }}
+                      variant="outline"
+                      className="flex-1"
+                    >
+                      <RefreshCw className="w-4 h-4 mr-2" />
+                      Edit Again
+                    </Button>
                   </div>
                 )}
               </div>
@@ -503,61 +947,69 @@ export default function Dashboard() {
           </TabsContent>
 
           {/* History */}
-          <TabsContent value="history">
+          <TabsContent value="history" className="space-y-6">
             <div className="glass rounded-2xl p-6">
-              <h2 className="font-display text-xl font-semibold mb-6 flex items-center gap-2">
-                <BarChart3 className="w-5 h-5 text-primary" />
-                Generation History
-              </h2>
-
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="font-display text-xl font-semibold flex items-center gap-2">
+                  <History className="w-5 h-5 text-primary" />
+                  Generation History
+                </h2>
+                <Button variant="outline" size="sm" onClick={fetchGenerations}>
+                  <RefreshCw className="w-4 h-4 mr-2" />
+                  Refresh
+                </Button>
+              </div>
+              
               {loadingHistory ? (
                 <div className="text-center py-12">
                   <Loader2 className="w-8 h-8 animate-spin text-primary mx-auto" />
                 </div>
-              ) : generations.length === 0 ? (
-                <div className="text-center py-12 text-muted-foreground">
-                  <History className="w-16 h-16 mx-auto mb-4 opacity-30" />
-                  <p>No generations yet. Start creating!</p>
-                </div>
-              ) : (
+              ) : generations.length > 0 ? (
                 <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                   {generations.map((gen) => (
                     <div 
                       key={gen.id}
                       className="rounded-xl bg-surface-2 border border-border overflow-hidden group"
                     >
-                      {gen.generation_type === 'thumbnail' && gen.image_url ? (
+                      {gen.image_url ? (
                         <div className="aspect-video relative">
                           <img 
                             src={gen.image_url} 
-                            alt={gen.prompt || 'Generated thumbnail'}
+                            alt={gen.prompt || 'Generated'} 
                             className="w-full h-full object-cover"
                           />
                           <div className="absolute inset-0 bg-background/80 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
-                            <Button 
-                              size="icon" 
-                              variant="ghost"
+                            <Button
+                              size="sm"
+                              variant="secondary"
                               onClick={() => handleDownload(gen.image_url!)}
                             >
                               <Download className="w-4 h-4" />
                             </Button>
-                            <Button 
-                              size="icon" 
-                              variant="ghost"
+                            <Button
+                              size="sm"
+                              variant="secondary"
+                              onClick={() => useImageForEdit(gen.image_url!)}
+                            >
+                              <Palette className="w-4 h-4" />
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="destructive"
                               onClick={() => handleDeleteGeneration(gen.id)}
                             >
-                              <Trash2 className="w-4 h-4 text-destructive" />
+                              <Trash2 className="w-4 h-4" />
                             </Button>
                           </div>
                         </div>
                       ) : (
-                        <div className="aspect-video bg-surface-3 flex items-center justify-center">
+                        <div className="aspect-video bg-surface-1 flex items-center justify-center">
                           <Type className="w-8 h-8 text-muted-foreground" />
                         </div>
                       )}
                       <div className="p-3">
-                        <p className="text-sm line-clamp-2">{gen.prompt}</p>
-                        <div className="flex items-center justify-between mt-2">
+                        <p className="text-sm font-medium line-clamp-1">{gen.prompt || 'Generation'}</p>
+                        <div className="flex items-center justify-between mt-1">
                           <span className="text-xs text-muted-foreground capitalize">
                             {gen.generation_type}
                           </span>
@@ -568,6 +1020,12 @@ export default function Dashboard() {
                       </div>
                     </div>
                   ))}
+                </div>
+              ) : (
+                <div className="text-center py-12 text-muted-foreground">
+                  <History className="w-16 h-16 mx-auto mb-4 opacity-30" />
+                  <p>No generations yet</p>
+                  <p className="text-sm">Start creating to see your history here</p>
                 </div>
               )}
             </div>
