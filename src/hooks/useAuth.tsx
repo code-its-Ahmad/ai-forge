@@ -31,18 +31,44 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const fetchProfile = async (userId: string) => {
+  const fetchProfile = async (userId: string, userEmail?: string, fullName?: string) => {
     try {
       const { data, error } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', userId)
-        .single();
+        .maybeSingle();
 
-      if (error) throw error;
-      setProfile(data as Profile);
+      if (error) {
+        console.error('Error fetching profile:', error);
+        return;
+      }
+      
+      if (data) {
+        setProfile(data as Profile);
+      } else if (userEmail) {
+        // Profile doesn't exist, create it
+        const { data: newProfile, error: insertError } = await supabase
+          .from('profiles')
+          .insert({
+            id: userId,
+            email: userEmail,
+            full_name: fullName || userEmail.split('@')[0],
+            subscription_tier: 'free',
+            monthly_usage: 0,
+            usage_limit: 10
+          })
+          .select()
+          .single();
+        
+        if (insertError) {
+          console.error('Error creating profile:', insertError);
+        } else {
+          setProfile(newProfile as Profile);
+        }
+      }
     } catch (error) {
-      console.error('Error fetching profile:', error);
+      console.error('Error in fetchProfile:', error);
     }
   };
 
@@ -62,8 +88,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (session?.user) {
           // Defer profile fetch to avoid deadlock
           setTimeout(() => {
-            fetchProfile(session.user.id);
-          }, 0);
+            fetchProfile(
+              session.user.id, 
+              session.user.email, 
+              session.user.user_metadata?.full_name
+            );
+          }, 100);
         } else {
           setProfile(null);
         }
@@ -75,7 +105,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setSession(session);
       setUser(session?.user ?? null);
       if (session?.user) {
-        fetchProfile(session.user.id);
+        fetchProfile(
+          session.user.id,
+          session.user.email,
+          session.user.user_metadata?.full_name
+        );
       }
       setLoading(false);
     });
