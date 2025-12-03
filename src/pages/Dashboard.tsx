@@ -59,7 +59,7 @@ export default function Dashboard() {
   const [persona, setPersona] = useState('none');
   const [generating, setGenerating] = useState(false);
   const [generatedImage, setGeneratedImage] = useState<string | null>(null);
-  const [referenceImage, setReferenceImage] = useState<string>('');
+  const [referenceImages, setReferenceImages] = useState<string[]>([]);
   const referenceInputRef = useRef<HTMLInputElement>(null);
   
   // Title generation
@@ -176,6 +176,48 @@ export default function Dashboard() {
     }
   };
 
+  const handleMultipleImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files;
+    if (!files || files.length === 0) return;
+
+    const newImages: string[] = [];
+    
+    for (let i = 0; i < Math.min(files.length, 5 - referenceImages.length); i++) {
+      const file = files[i];
+      
+      if (!file.type.startsWith('image/')) {
+        toast.error(`${file.name} is not an image file`);
+        continue;
+      }
+
+      if (file.size > 10 * 1024 * 1024) {
+        toast.error(`${file.name} is too large (max 10MB)`);
+        continue;
+      }
+
+      try {
+        const base64 = await handleFileToBase64(file);
+        newImages.push(base64);
+      } catch {
+        toast.error(`Failed to upload ${file.name}`);
+      }
+    }
+
+    if (newImages.length > 0) {
+      setReferenceImages(prev => [...prev, ...newImages].slice(0, 5));
+      toast.success(`${newImages.length} image(s) uploaded successfully`);
+    }
+    
+    // Reset the input
+    if (referenceInputRef.current) {
+      referenceInputRef.current.value = '';
+    }
+  };
+
+  const removeReferenceImage = (index: number) => {
+    setReferenceImages(prev => prev.filter((_, i) => i !== index));
+  };
+
   const handleGenerateThumbnail = async () => {
     if (!prompt.trim()) {
       toast.error('Please enter a prompt');
@@ -188,7 +230,7 @@ export default function Dashboard() {
 
     try {
       const { data, error } = await supabase.functions.invoke('generate-thumbnail', {
-        body: { prompt, platform, style, language, persona, referenceImage: referenceImage || undefined }
+        body: { prompt, platform, style, language, persona, referenceImages: referenceImages.length > 0 ? referenceImages : undefined }
       });
 
       if (error) throw error;
@@ -551,13 +593,14 @@ export default function Dashboard() {
                     Reference Image (Optional)
                   </Label>
                   <p className="text-xs text-muted-foreground">
-                    Upload your face or a reference image to guide the AI generation
+                    Upload up to 5 reference images (faces, style references) to guide AI generation
                   </p>
                   <input
                     type="file"
                     ref={referenceInputRef}
                     accept="image/*"
-                    onChange={(e) => handleImageUpload(e, setReferenceImage)}
+                    multiple
+                    onChange={handleMultipleImageUpload}
                     className="hidden"
                   />
                   <div className="flex gap-2">
@@ -566,27 +609,41 @@ export default function Dashboard() {
                       variant="outline"
                       className="flex-1"
                       onClick={() => referenceInputRef.current?.click()}
+                      disabled={referenceImages.length >= 5}
                     >
                       <Upload className="w-4 h-4 mr-2" />
-                      {referenceImage ? 'Change Image' : 'Upload Image'}
+                      {referenceImages.length > 0 ? `Add More (${referenceImages.length}/5)` : 'Upload Images'}
                     </Button>
-                    {referenceImage && (
+                    {referenceImages.length > 0 && (
                       <Button
                         type="button"
                         variant="outline"
-                        onClick={() => setReferenceImage('')}
+                        onClick={() => setReferenceImages([])}
                       >
                         <Trash2 className="w-4 h-4" />
                       </Button>
                     )}
                   </div>
-                  {referenceImage && (
-                    <div className="mt-2 relative aspect-video w-32 rounded-lg overflow-hidden border border-border">
-                      <img 
-                        src={referenceImage} 
-                        alt="Reference" 
-                        className="w-full h-full object-cover"
-                      />
+                  {referenceImages.length > 0 && (
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {referenceImages.map((img, index) => (
+                        <div key={index} className="relative group">
+                          <div className="aspect-square w-16 rounded-lg overflow-hidden border border-border">
+                            <img 
+                              src={img} 
+                              alt={`Reference ${index + 1}`} 
+                              className="w-full h-full object-cover"
+                            />
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => removeReferenceImage(index)}
+                            className="absolute -top-1 -right-1 w-5 h-5 bg-destructive text-destructive-foreground rounded-full flex items-center justify-center text-xs opacity-0 group-hover:opacity-100 transition-opacity"
+                          >
+                            ×
+                          </button>
+                        </div>
+                      ))}
                     </div>
                   )}
                 </div>
