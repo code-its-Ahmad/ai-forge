@@ -12,6 +12,7 @@ import { Navbar } from '@/components/Navbar';
 import { YouTubeAnalyzer } from '@/components/dashboard/YouTubeAnalyzer';
 import { ThumbnailScorer } from '@/components/dashboard/ThumbnailScorer';
 import { ABTester } from '@/components/dashboard/ABTester';
+import { AdvancedImageEditor } from '@/components/dashboard/AdvancedImageEditor';
 import { toast } from 'sonner';
 import { 
   Sparkles, 
@@ -1216,139 +1217,18 @@ export default function Dashboard() {
 
           {/* Edit Thumbnail */}
           <TabsContent value="edit" className="space-y-6">
-            <div className="grid lg:grid-cols-2 gap-6">
-              <div className="glass rounded-2xl p-6 space-y-4">
-                <h2 className="font-display text-xl font-semibold flex items-center gap-2">
-                  <Palette className="w-5 h-5 text-primary" />
-                  Edit Thumbnail
-                </h2>
-
-                <div className="space-y-2">
-                  <Label>Image to Edit</Label>
-                  <div 
-                    className="border-2 border-dashed border-border rounded-xl p-4 text-center cursor-pointer hover:border-primary/50 transition-colors"
-                    onClick={() => editInputRef.current?.click()}
-                  >
-                    {editImageUrl ? (
-                      <img src={editImageUrl} alt="To edit" className="max-h-32 mx-auto rounded-lg" />
-                    ) : (
-                      <>
-                        <Upload className="w-8 h-8 mx-auto mb-2 text-muted-foreground" />
-                        <p className="text-sm text-muted-foreground">Click to upload or use generated image</p>
-                      </>
-                    )}
-                  </div>
-                  <input
-                    ref={editInputRef}
-                    type="file"
-                    accept="image/*"
-                    className="hidden"
-                    onChange={(e) => handleImageUpload(e, setEditImageUrl)}
-                  />
-                  <Input
-                    placeholder="Or paste image URL"
-                    value={editImageUrl.startsWith('data:') ? '' : editImageUrl}
-                    onChange={(e) => setEditImageUrl(e.target.value)}
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Edit Type</Label>
-                  <Select value={editType} onValueChange={setEditType}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="enhance">Enhance & Improve</SelectItem>
-                      <SelectItem value="text_overlay">Add Text Overlay</SelectItem>
-                      <SelectItem value="background_change">Change Background</SelectItem>
-                      <SelectItem value="style_transfer">Apply Style</SelectItem>
-                      <SelectItem value="color_grade">Color Grading</SelectItem>
-                      <SelectItem value="remove_background">Remove Background</SelectItem>
-                      <SelectItem value="add_effects">Add Effects</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Edit Instructions (Optional)</Label>
-                  <Textarea
-                    placeholder="Describe what changes you want..."
-                    value={editPrompt}
-                    onChange={(e) => setEditPrompt(e.target.value)}
-                    className="min-h-[80px]"
-                  />
-                </div>
-
-                <Button 
-                  onClick={handleEditThumbnail}
-                  variant="mint"
-                  className="w-full"
-                  size="lg"
-                  disabled={editing || !editImageUrl}
-                >
-                  {editing ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      Editing...
-                    </>
-                  ) : (
-                    <>
-                      <Wand2 className="w-4 h-4" />
-                      Apply Edits
-                    </>
-                  )}
-                </Button>
-              </div>
-
-              {/* Edit Result */}
-              <div className="glass rounded-2xl p-6">
-                <h2 className="font-display text-xl font-semibold mb-4">Edited Result</h2>
-                <div className="aspect-video rounded-xl bg-surface-2 border border-border overflow-hidden flex items-center justify-center">
-                  {editing ? (
-                    <div className="text-center">
-                      <Loader2 className="w-12 h-12 animate-spin text-primary mx-auto mb-4" />
-                      <p className="text-muted-foreground">Applying edits...</p>
-                    </div>
-                  ) : editedImage ? (
-                    <img 
-                      src={editedImage} 
-                      alt="Edited thumbnail" 
-                      className="w-full h-full object-cover"
-                    />
-                  ) : (
-                    <div className="text-center text-muted-foreground">
-                      <Palette className="w-16 h-16 mx-auto mb-4 opacity-30" />
-                      <p>Your edited image will appear here</p>
-                    </div>
-                  )}
-                </div>
-                
-                {editedImage && (
-                  <div className="flex gap-2 mt-4">
-                    <Button 
-                      onClick={() => handleDownload(editedImage, 'edited-thumbnail.png')}
-                      variant="outline"
-                      className="flex-1"
-                    >
-                      <Download className="w-4 h-4 mr-2" />
-                      Download
-                    </Button>
-                    <Button 
-                      onClick={() => {
-                        setEditImageUrl(editedImage);
-                        setEditedImage(null);
-                      }}
-                      variant="outline"
-                      className="flex-1"
-                    >
-                      <RefreshCw className="w-4 h-4 mr-2" />
-                      Edit Again
-                    </Button>
-                  </div>
-                )}
-              </div>
-            </div>
+            <AdvancedImageEditor
+              initialImage={editImageUrl}
+              userId={user!.id}
+              onUsageIncrement={async () => {
+                await supabase.rpc('increment_usage', { user_uuid: user!.id });
+              }}
+              refreshProfile={refreshProfile}
+              fetchGenerations={fetchGenerations}
+              onSave={(imageUrl) => {
+                setEditedImage(imageUrl);
+              }}
+            />
           </TabsContent>
 
           {/* YouTube Analyzer */}
