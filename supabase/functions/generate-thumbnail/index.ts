@@ -11,7 +11,7 @@ serve(async (req) => {
   }
 
   try {
-    const { prompt, platform = 'youtube', style = 'professional', language = 'english', persona = 'none', referenceImage } = await req.json();
+    const { prompt, platform = 'youtube', style = 'professional', language = 'english', persona = 'none', referenceImages } = await req.json();
     const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
 
     if (!LOVABLE_API_KEY) {
@@ -22,7 +22,7 @@ serve(async (req) => {
       throw new Error('Prompt is required');
     }
 
-    console.log('Generating thumbnail with Gemini 3 Pro Image:', { prompt, platform, style, language, persona, hasReferenceImage: !!referenceImage });
+    console.log('Generating thumbnail with Gemini 3 Pro Image:', { prompt, platform, style, language, persona, referenceImageCount: referenceImages?.length || 0 });
 
     // Platform-specific guidelines
     const platformGuidelines: Record<string, { aspectRatio: string; tips: string; dimensions: string }> = {
@@ -186,20 +186,23 @@ DESIGN RULES:
 
 The thumbnail should make viewers WANT to click immediately.`;
 
-    // Build the message content - include reference image if provided
+    // Build the message content - include reference images if provided
     const messageContent: any[] = [
       { type: 'text', text: enhancedPrompt }
     ];
 
-    if (referenceImage) {
+    if (referenceImages && referenceImages.length > 0) {
       messageContent.push({
         type: 'text',
-        text: 'Use this reference image as guidance for faces, style, or composition. Incorporate elements from this image into the thumbnail:'
+        text: `Use these ${referenceImages.length} reference image(s) as guidance for faces, style, composition, and visual consistency. Incorporate elements from these images into the generated thumbnail:`
       });
-      messageContent.push({
-        type: 'image_url',
-        image_url: { url: referenceImage }
-      });
+      
+      for (let i = 0; i < referenceImages.length; i++) {
+        messageContent.push({
+          type: 'image_url',
+          image_url: { url: referenceImages[i] }
+        });
+      }
     }
 
     const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
