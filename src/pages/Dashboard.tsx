@@ -59,6 +59,8 @@ export default function Dashboard() {
   const [persona, setPersona] = useState('none');
   const [generating, setGenerating] = useState(false);
   const [generatedImage, setGeneratedImage] = useState<string | null>(null);
+  const [referenceImage, setReferenceImage] = useState<string>('');
+  const referenceInputRef = useRef<HTMLInputElement>(null);
   
   // Title generation
   const [titleTopic, setTitleTopic] = useState('');
@@ -186,7 +188,7 @@ export default function Dashboard() {
 
     try {
       const { data, error } = await supabase.functions.invoke('generate-thumbnail', {
-        body: { prompt, platform, style, language, persona }
+        body: { prompt, platform, style, language, persona, referenceImage: referenceImage || undefined }
       });
 
       if (error) throw error;
@@ -540,6 +542,53 @@ export default function Dashboard() {
                     onChange={(e) => setPrompt(e.target.value)}
                     className="min-h-[100px]"
                   />
+                </div>
+
+                {/* Reference Image Upload */}
+                <div className="space-y-2">
+                  <Label className="flex items-center gap-2">
+                    <Upload className="w-4 h-4" />
+                    Reference Image (Optional)
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    Upload your face or a reference image to guide the AI generation
+                  </p>
+                  <input
+                    type="file"
+                    ref={referenceInputRef}
+                    accept="image/*"
+                    onChange={(e) => handleImageUpload(e, setReferenceImage)}
+                    className="hidden"
+                  />
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="flex-1"
+                      onClick={() => referenceInputRef.current?.click()}
+                    >
+                      <Upload className="w-4 h-4 mr-2" />
+                      {referenceImage ? 'Change Image' : 'Upload Image'}
+                    </Button>
+                    {referenceImage && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => setReferenceImage('')}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    )}
+                  </div>
+                  {referenceImage && (
+                    <div className="mt-2 relative aspect-video w-32 rounded-lg overflow-hidden border border-border">
+                      <img 
+                        src={referenceImage} 
+                        alt="Reference" 
+                        className="w-full h-full object-cover"
+                      />
+                    </div>
+                  )}
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">

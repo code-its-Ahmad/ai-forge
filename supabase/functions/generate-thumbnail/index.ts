@@ -11,7 +11,7 @@ serve(async (req) => {
   }
 
   try {
-    const { prompt, platform = 'youtube', style = 'professional', language = 'english', persona = 'none' } = await req.json();
+    const { prompt, platform = 'youtube', style = 'professional', language = 'english', persona = 'none', referenceImage } = await req.json();
     const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
 
     if (!LOVABLE_API_KEY) {
@@ -22,7 +22,7 @@ serve(async (req) => {
       throw new Error('Prompt is required');
     }
 
-    console.log('Generating thumbnail with Nano Banana Pro:', { prompt, platform, style, language, persona });
+    console.log('Generating thumbnail with Gemini 3 Pro Image:', { prompt, platform, style, language, persona, hasReferenceImage: !!referenceImage });
 
     // Platform-specific guidelines
     const platformGuidelines: Record<string, { aspectRatio: string; tips: string; dimensions: string }> = {
@@ -186,6 +186,22 @@ DESIGN RULES:
 
 The thumbnail should make viewers WANT to click immediately.`;
 
+    // Build the message content - include reference image if provided
+    const messageContent: any[] = [
+      { type: 'text', text: enhancedPrompt }
+    ];
+
+    if (referenceImage) {
+      messageContent.push({
+        type: 'text',
+        text: 'Use this reference image as guidance for faces, style, or composition. Incorporate elements from this image into the thumbnail:'
+      });
+      messageContent.push({
+        type: 'image_url',
+        image_url: { url: referenceImage }
+      });
+    }
+
     const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -195,7 +211,7 @@ The thumbnail should make viewers WANT to click immediately.`;
       body: JSON.stringify({
         model: 'google/gemini-3-pro-image-preview',
         messages: [
-          { role: 'user', content: enhancedPrompt }
+          { role: 'user', content: messageContent }
         ],
         modalities: ['image', 'text']
       }),
