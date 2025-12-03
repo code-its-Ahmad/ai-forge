@@ -11,7 +11,7 @@ serve(async (req) => {
   }
 
   try {
-    const { imageUrl, niche = 'general' } = await req.json();
+    const { imageUrl, niche = 'general', clientAnalysis } = await req.json();
     const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
 
     if (!LOVABLE_API_KEY) {
@@ -22,7 +22,20 @@ serve(async (req) => {
       throw new Error('Image URL is required');
     }
 
-    console.log('Scoring thumbnail for niche:', niche);
+    console.log('Scoring thumbnail with Gemini 3 Pro for niche:', niche);
+
+    // Include client-side TensorFlow analysis if provided
+    const clientDataSection = clientAnalysis ? `
+Client-Side Neural Network Analysis (TensorFlow.js):
+- Faces Detected: ${clientAnalysis.faces?.length || 0}
+- Dominant Colors: ${clientAnalysis.dominantColors?.join(', ') || 'N/A'}
+- Brightness: ${clientAnalysis.brightness}%
+- Contrast: ${clientAnalysis.contrast}%
+- Resolution: ${clientAnalysis.resolution?.width}x${clientAnalysis.resolution?.height}
+- Preliminary Quality Score: ${clientAnalysis.qualityScore}/100
+
+Use this data to enhance your analysis.
+` : '';
 
     const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
@@ -31,56 +44,66 @@ serve(async (req) => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'google/gemini-2.5-flash',
+        model: 'google/gemini-3-pro-preview', // Latest Gemini 3 Pro
         messages: [
           {
             role: 'user',
             content: [
               {
                 type: 'text',
-                text: `You are a YouTube thumbnail expert. Analyze this thumbnail for the "${niche}" niche and provide a comprehensive scoring.
+                text: `You are an elite YouTube thumbnail expert and CTR optimization specialist. Analyze this thumbnail for the "${niche}" niche with extreme precision.
 
-Score each category from 1-100 and provide specific feedback:
+${clientDataSection}
+
+SCORING CRITERIA (Be strict and precise):
 
 1. **Visual Impact** (25 points max)
-   - Does it grab attention in <1 second?
-   - Bold colors, high contrast?
+   - First-glance attention grab (0-10)
+   - Color psychology effectiveness (0-8)
+   - Contrast and visual hierarchy (0-7)
    
 2. **Emotional Appeal** (25 points max)
-   - Does it evoke curiosity, excitement, or urgency?
-   - Facial expressions compelling?
+   - Curiosity/intrigue generation (0-10)
+   - Emotional trigger strength (0-8)
+   - Facial expression effectiveness if present (0-7)
 
 3. **Clarity & Readability** (25 points max)
-   - Clear focal point?
-   - Text readable at small sizes?
-   - Not too cluttered?
+   - Focal point clarity (0-10)
+   - Text readability at small sizes (0-8)
+   - Clutter-free composition (0-7)
 
-4. **Brand Consistency** (15 points max)
-   - Professional look?
-   - Consistent style elements?
+4. **Brand & Niche Fit** (15 points max)
+   - Niche-appropriate styling (0-8)
+   - Professional quality (0-7)
 
 5. **Platform Optimization** (10 points max)
-   - Correct aspect ratio (16:9)?
-   - Works on mobile?
+   - Mobile-friendly (0-5)
+   - Aspect ratio correctness (0-5)
 
-Return ONLY this JSON structure:
+CTR PREDICTION based on:
+- Industry benchmarks for ${niche}
+- Visual engagement factors
+- Competitive analysis signals
+
+Return ONLY this JSON structure (no markdown, no explanation):
 {
   "totalScore": number,
   "grade": "S"|"A"|"B"|"C"|"D"|"F",
   "ctrPrediction": { "low": number, "expected": number, "high": number },
   "categories": {
-    "visualImpact": { "score": number, "feedback": string },
-    "emotionalAppeal": { "score": number, "feedback": string },
-    "clarityReadability": { "score": number, "feedback": string },
-    "brandConsistency": { "score": number, "feedback": string },
-    "platformOptimization": { "score": number, "feedback": string }
+    "visualImpact": { "score": number, "maxScore": 25, "feedback": string },
+    "emotionalAppeal": { "score": number, "maxScore": 25, "feedback": string },
+    "clarityReadability": { "score": number, "maxScore": 25, "feedback": string },
+    "brandConsistency": { "score": number, "maxScore": 15, "feedback": string },
+    "platformOptimization": { "score": number, "maxScore": 10, "feedback": string }
   },
   "strengths": string[],
   "weaknesses": string[],
   "actionableImprovements": [
     { "priority": "high"|"medium"|"low", "suggestion": string, "expectedImpact": string }
   ],
-  "competitorComparison": string
+  "competitorComparison": string,
+  "nicheSpecificTips": string[]
 }`
               },
               {
@@ -103,6 +126,12 @@ Return ONLY this JSON structure:
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }
+      if (response.status === 402) {
+        return new Response(JSON.stringify({ error: 'Usage limit reached. Please add credits.' }), {
+          status: 402,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
       throw new Error(`AI Gateway error: ${response.status}`);
     }
 
@@ -122,12 +151,14 @@ Return ONLY this JSON structure:
         throw new Error('Invalid response format');
       }
     } catch {
+      console.error('Failed to parse response:', content);
       throw new Error('Failed to parse AI response');
     }
 
     return new Response(JSON.stringify({
       success: true,
       ...scoreData,
+      model: 'gemini-3-pro-preview',
       analyzedAt: new Date().toISOString(),
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
