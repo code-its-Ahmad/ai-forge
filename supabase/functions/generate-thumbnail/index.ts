@@ -11,7 +11,7 @@ serve(async (req) => {
   }
 
   try {
-    const { prompt, platform = 'youtube', style = 'professional' } = await req.json();
+    const { prompt, platform = 'youtube', style = 'professional', language = 'english', persona = 'none' } = await req.json();
     const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
 
     if (!LOVABLE_API_KEY) {
@@ -22,7 +22,7 @@ serve(async (req) => {
       throw new Error('Prompt is required');
     }
 
-    console.log('Generating thumbnail with Nano Banana Pro:', { prompt, platform, style });
+    console.log('Generating thumbnail with Nano Banana Pro:', { prompt, platform, style, language, persona });
 
     // Platform-specific guidelines
     const platformGuidelines: Record<string, { aspectRatio: string; tips: string; dimensions: string }> = {
@@ -67,6 +67,102 @@ serve(async (req) => {
 
     const styleGuide = styleEnhancements[style] || styleEnhancements.professional;
 
+    // Language mappings
+    const languageNames: Record<string, string> = {
+      english: 'English',
+      spanish: 'Spanish (Español)',
+      french: 'French (Français)',
+      german: 'German (Deutsch)',
+      portuguese: 'Portuguese (Português)',
+      italian: 'Italian (Italiano)',
+      russian: 'Russian (Русский)',
+      japanese: 'Japanese (日本語)',
+      korean: 'Korean (한국어)',
+      chinese: 'Chinese (中文)',
+      arabic: 'Arabic (العربية)',
+      hindi: 'Hindi (हिन्दी)',
+      urdu: 'Urdu (اردو)',
+      turkish: 'Turkish (Türkçe)',
+      dutch: 'Dutch (Nederlands)',
+      polish: 'Polish (Polski)',
+      vietnamese: 'Vietnamese (Tiếng Việt)',
+      thai: 'Thai (ไทย)',
+      indonesian: 'Indonesian (Bahasa Indonesia)',
+    };
+
+    // Persona-specific styling
+    const personaStyles: Record<string, string> = {
+      none: '',
+      mrbeast: `MrBeast thumbnail style: 
+        - EXTREME expressions (shocked, excited, mouth wide open)
+        - Bold neon colors (especially yellow, red, blue)
+        - MASSIVE text with thick outlines
+        - Money imagery, challenges, before/after splits
+        - High energy, explosive visual effects`,
+      mkbhd: `MKBHD thumbnail style:
+        - Clean, minimalist tech aesthetic
+        - Dark backgrounds with product focus
+        - Premium, sleek presentation
+        - Red accent colors, sophisticated typography
+        - Single product hero shot with subtle reflections`,
+      veritasium: `Veritasium thumbnail style:
+        - Educational, scientific imagery
+        - Curious expressions, raised eyebrow
+        - Clean diagrams and visual explanations
+        - Blue/orange color contrasts
+        - Thought-provoking questions implied`,
+      pewdiepie: `PewDiePie thumbnail style:
+        - Exaggerated facial expressions
+        - Red/black color scheme
+        - Gaming and meme references
+        - Bold, playful text overlays
+        - High contrast, energetic feel`,
+      casey: `Casey Neistat thumbnail style:
+        - Cinematic, documentary feel
+        - Urban, adventurous imagery
+        - Raw, authentic expressions
+        - High contrast black and white option
+        - Story-telling visual narrative`,
+      linus: `Linus Tech Tips thumbnail style:
+        - Tech products prominently featured
+        - Orange/black color scheme
+        - Reaction faces with tech
+        - Multiple products comparison layout
+        - Clean product photography`,
+      vsauce: `Vsauce thumbnail style:
+        - Mind-bending visuals
+        - Curious, questioning expressions
+        - Space and science imagery
+        - Simple but intriguing concepts
+        - Text with ellipsis or questions`,
+      kurzgesagt: `Kurzgesagt thumbnail style:
+        - Flat design illustration style
+        - Vibrant, colorful palette
+        - Cute bird characters (optional)
+        - Space and science themes
+        - Clean vector art aesthetic`,
+      cocomelon: `CoComelon thumbnail style:
+        - Bright, child-friendly colors
+        - Cartoon characters and animations
+        - Simple, playful typography
+        - Educational themes
+        - Pastel and primary color palette`,
+      dude_perfect: `Dude Perfect thumbnail style:
+        - Sports and trick shots imagery
+        - Dynamic action poses
+        - Green/blue color scheme
+        - Big numbers and records
+        - Celebratory, excited expressions`,
+    };
+
+    const personaGuide = personaStyles[persona] || '';
+    const selectedLanguage = languageNames[language] || 'English';
+
+    // Build the language instruction
+    const languageInstruction = language !== 'english' 
+      ? `LANGUAGE REQUIREMENT: ALL text in the thumbnail MUST be written in ${selectedLanguage}. Translate the title/topic into ${selectedLanguage} for the thumbnail text.`
+      : '';
+
     const enhancedPrompt = `Create a professional ${platform.toUpperCase()} thumbnail image.
 
 Topic/Title: "${prompt}"
@@ -75,6 +171,8 @@ CRITICAL REQUIREMENTS:
 - Aspect Ratio: ${guidelines.aspectRatio} (${guidelines.dimensions})
 - Style: ${style} - ${styleGuide}
 - ${guidelines.tips}
+${languageInstruction ? `\n${languageInstruction}` : ''}
+${personaGuide ? `\nPERSONA STYLE:\n${personaGuide}` : ''}
 
 DESIGN RULES:
 1. Use high-impact visuals that grab attention in under 1 second
@@ -95,7 +193,7 @@ The thumbnail should make viewers WANT to click immediately.`;
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'google/gemini-2.5-flash-image-preview', // Nano Banana Pro
+        model: 'google/gemini-2.5-flash-image-preview',
         messages: [
           { role: 'user', content: enhancedPrompt }
         ],
@@ -137,6 +235,8 @@ The thumbnail should make viewers WANT to click immediately.`;
       prompt,
       platform,
       style,
+      language,
+      persona,
       model: 'gemini-2.5-flash-image-preview',
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
