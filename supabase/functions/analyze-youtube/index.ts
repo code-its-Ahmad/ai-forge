@@ -75,31 +75,36 @@ serve(async (req) => {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            model: 'google/gemini-2.5-flash',
+            model: 'google/gemini-3-pro-preview', // Latest Gemini 3 Pro
             messages: [
               {
                 role: 'user',
                 content: [
                   {
                     type: 'text',
-                    text: `Analyze this YouTube thumbnail and provide:
-1. Overall Score (1-100)
-2. Color Analysis (dominant colors, contrast level)
-3. Text Analysis (if any text visible, readability score)
-4. Face Detection (number of faces, expressions)
-5. Composition Analysis (rule of thirds, focal points)
-6. CTR Prediction (low/medium/high)
-7. 3 Specific Improvements to increase CTR
+                    text: `You are an elite YouTube thumbnail analyst. Analyze this thumbnail with precision and provide comprehensive insights.
 
-Return as JSON:
+ANALYSIS CRITERIA:
+1. Overall Score (1-100) - Be strict and accurate
+2. Color Analysis - Identify dominant colors and contrast effectiveness
+3. Text Analysis - Detect any text, assess readability at small sizes
+4. Face Detection - Count faces, analyze expressions and emotional impact
+5. Composition - Rule of thirds, visual hierarchy, focal points
+6. CTR Prediction - Based on industry benchmarks
+7. 5 Specific Improvements to maximize CTR
+
+Return ONLY this JSON (no markdown):
 {
   "score": number,
-  "colorAnalysis": { "dominantColors": string[], "contrastLevel": "low"|"medium"|"high" },
-  "textAnalysis": { "hasText": boolean, "readability": "poor"|"good"|"excellent" },
-  "faceAnalysis": { "faceCount": number, "expressions": string[] },
-  "composition": { "ruleOfThirds": boolean, "focalPoints": string[] },
+  "colorAnalysis": { "dominantColors": string[], "contrastLevel": "low"|"medium"|"high", "colorHarmony": string },
+  "textAnalysis": { "hasText": boolean, "readability": "poor"|"good"|"excellent", "textContent": string },
+  "faceAnalysis": { "faceCount": number, "expressions": string[], "eyeContact": boolean },
+  "composition": { "ruleOfThirds": boolean, "focalPoints": string[], "visualFlow": string },
   "ctrPrediction": "low"|"medium"|"high",
-  "improvements": string[]
+  "estimatedCTR": { "min": number, "max": number },
+  "improvements": string[],
+  "strengths": string[],
+  "overallFeedback": string
 }`
                   },
                   {

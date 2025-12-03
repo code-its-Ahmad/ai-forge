@@ -31,52 +31,65 @@ serve(async (req) => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'google/gemini-2.5-flash',
+        model: 'google/gemini-3-pro-preview', // Latest Gemini 3 Pro for advanced analysis
         messages: [
           {
             role: 'user',
             content: [
               {
                 type: 'text',
-                text: `You are a YouTube A/B testing expert. Compare these two thumbnails${videoTitle ? ` for the video "${videoTitle}"` : ''} and determine which one would perform better.
+                text: `You are an elite YouTube A/B testing specialist with deep expertise in thumbnail optimization and CTR prediction. Compare these two thumbnails${videoTitle ? ` for the video "${videoTitle}"` : ''} with precision.
 
-Analyze both thumbnails and provide:
-1. Winner selection with confidence percentage
-2. Detailed comparison across key metrics
-3. Specific reasons why the winner is better
-4. How to improve the losing thumbnail
+EVALUATION CRITERIA:
+1. Visual Impact (instant attention grab)
+2. Emotional Appeal (curiosity, excitement, urgency)
+3. Clarity (focal points, message clarity)
+4. Clickability (thumb-stopping power)
+5. Professionalism (production quality)
+6. Mobile Optimization (small screen readability)
+7. Color Psychology (strategic color usage)
 
-Return ONLY this JSON:
+Provide a comprehensive analysis with statistical confidence levels.
+
+Return ONLY this JSON (no markdown):
 {
   "winner": "A"|"B",
   "confidence": number,
   "winnerExplanation": string,
+  "statisticalConfidence": "low"|"medium"|"high"|"very high",
   "comparison": {
-    "visualImpact": { "A": number, "B": number, "winner": "A"|"B" },
-    "emotionalAppeal": { "A": number, "B": number, "winner": "A"|"B" },
-    "clarity": { "A": number, "B": number, "winner": "A"|"B" },
-    "clickability": { "A": number, "B": number, "winner": "A"|"B" },
-    "professionalism": { "A": number, "B": number, "winner": "A"|"B" }
+    "visualImpact": { "A": number, "B": number, "winner": "A"|"B", "margin": number },
+    "emotionalAppeal": { "A": number, "B": number, "winner": "A"|"B", "margin": number },
+    "clarity": { "A": number, "B": number, "winner": "A"|"B", "margin": number },
+    "clickability": { "A": number, "B": number, "winner": "A"|"B", "margin": number },
+    "professionalism": { "A": number, "B": number, "winner": "A"|"B", "margin": number },
+    "mobileOptimization": { "A": number, "B": number, "winner": "A"|"B", "margin": number },
+    "colorPsychology": { "A": number, "B": number, "winner": "A"|"B", "margin": number }
   },
   "thumbnailA": {
     "score": number,
+    "grade": "S"|"A"|"B"|"C"|"D"|"F",
     "strengths": string[],
-    "weaknesses": string[]
+    "weaknesses": string[],
+    "uniqueElements": string[]
   },
   "thumbnailB": {
     "score": number,
+    "grade": "S"|"A"|"B"|"C"|"D"|"F",
     "strengths": string[],
-    "weaknesses": string[]
+    "weaknesses": string[],
+    "uniqueElements": string[]
   },
   "ctrPrediction": {
-    "A": { "min": number, "max": number },
-    "B": { "min": number, "max": number }
+    "A": { "min": number, "expected": number, "max": number },
+    "B": { "min": number, "expected": number, "max": number }
   },
   "recommendation": string,
   "improvementSuggestions": {
     "forLoser": string[],
     "forWinner": string[]
-  }
+  },
+  "combinedBestPractices": string[]
 }`
               },
               {

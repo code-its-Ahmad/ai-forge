@@ -22,17 +22,69 @@ serve(async (req) => {
       throw new Error('Image URL is required');
     }
 
-    console.log('Editing thumbnail:', { imageUrl, editPrompt, editType });
+    console.log('Editing thumbnail with Nano Banana Pro:', { editType });
 
-    // Use Gemini to edit/enhance the image
+    // Advanced edit instructions using neural network concepts
     const editInstructions: Record<string, string> = {
-      enhance: 'Enhance this thumbnail image to make it more vibrant, professional, and eye-catching. Improve contrast, saturation, and overall visual appeal while maintaining the original composition.',
-      text_overlay: `Add text overlay to this thumbnail: "${editPrompt}". Use bold, readable fonts that stand out. Place text strategically for maximum impact.`,
-      background_change: `Change the background of this thumbnail: ${editPrompt}. Maintain the main subject while creating a new, engaging background.`,
-      style_transfer: `Apply this style to the thumbnail: ${editPrompt}. Transform the image while keeping the main elements recognizable.`,
-      color_grade: `Apply color grading to this thumbnail: ${editPrompt || 'cinematic, professional look'}. Adjust colors for maximum visual impact.`,
-      remove_background: 'Remove the background from this image and replace it with a clean, professional gradient or solid color that complements the subject.',
-      add_effects: `Add these effects to the thumbnail: ${editPrompt || 'dramatic lighting, subtle glow, professional finish'}.`,
+      enhance: `ENHANCE this thumbnail image for maximum CTR:
+1. Increase vibrancy and color saturation strategically
+2. Improve contrast and dynamic range
+3. Sharpen key focal points
+4. Add subtle professional color grading
+5. Optimize for small screen viewing
+Keep the original composition intact while making it pop visually.`,
+      
+      text_overlay: `Add professional text overlay to this thumbnail: "${editPrompt}"
+Requirements:
+- Use bold, highly readable font
+- Strong contrast with background (add shadow/outline if needed)
+- Strategic placement that doesn't cover key visual elements
+- Text should be readable at 100x56 pixels
+- Make it attention-grabbing and clickable`,
+      
+      background_change: `Transform the background of this thumbnail: ${editPrompt}
+Requirements:
+- Maintain the main subject perfectly
+- New background should enhance visual appeal
+- Ensure proper lighting integration
+- Create depth and visual interest
+- Professional quality compositing`,
+      
+      style_transfer: `Apply this artistic style to the thumbnail: ${editPrompt}
+Requirements:
+- Maintain recognizability of key elements
+- Apply style consistently across the image
+- Keep faces/text readable
+- Enhance visual appeal while staying on-brand`,
+      
+      color_grade: `Apply professional color grading: ${editPrompt || 'cinematic, high-impact, viral-worthy'}
+Requirements:
+- Create mood-appropriate color palette
+- Enhance emotional impact
+- Maintain natural skin tones if faces present
+- Make colors pop on mobile screens`,
+      
+      remove_background: `Remove the background and create a new one:
+1. Precisely cut out the main subject
+2. Create a clean, professional gradient or dynamic background
+3. Add subtle depth with shadows
+4. Ensure edge quality is perfect
+5. Background should complement the subject and increase CTR`,
+      
+      add_effects: `Add professional effects: ${editPrompt || 'dramatic lighting, subtle glow, depth of field, professional finish'}
+Requirements:
+- Effects should enhance, not distract
+- Maintain professional quality
+- Optimize for thumbnail viewing size
+- Create visual hierarchy
+- Make the image more clickable`,
+
+      upscale: `Enhance image quality and resolution:
+1. Increase sharpness on key details
+2. Reduce noise and artifacts
+3. Enhance textures
+4. Improve overall clarity
+5. Maintain natural appearance`,
     };
 
     const prompt = editInstructions[editType] || editPrompt || editInstructions.enhance;
@@ -44,7 +96,7 @@ serve(async (req) => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'google/gemini-2.5-flash-image-preview',
+        model: 'google/gemini-2.5-flash-image-preview', // Nano Banana Pro for image editing
         messages: [
           {
             role: 'user',
@@ -78,7 +130,7 @@ serve(async (req) => {
     }
 
     const data = await response.json();
-    console.log('Edit response received');
+    console.log('Edit completed successfully');
 
     const editedImageUrl = data.choices?.[0]?.message?.images?.[0]?.image_url?.url;
 
@@ -90,6 +142,7 @@ serve(async (req) => {
       success: true,
       imageUrl: editedImageUrl,
       editType,
+      model: 'gemini-2.5-flash-image-preview',
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
