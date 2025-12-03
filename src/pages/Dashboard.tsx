@@ -55,6 +55,8 @@ export default function Dashboard() {
   const [prompt, setPrompt] = useState('');
   const [platform, setPlatform] = useState('youtube');
   const [style, setStyle] = useState('professional');
+  const [language, setLanguage] = useState('english');
+  const [persona, setPersona] = useState('none');
   const [generating, setGenerating] = useState(false);
   const [generatedImage, setGeneratedImage] = useState<string | null>(null);
   
@@ -184,7 +186,7 @@ export default function Dashboard() {
 
     try {
       const { data, error } = await supabase.functions.invoke('generate-thumbnail', {
-        body: { prompt, platform, style }
+        body: { prompt, platform, style, language, persona }
       });
 
       if (error) throw error;
@@ -199,7 +201,7 @@ export default function Dashboard() {
         prompt,
         image_url: data.imageUrl,
         platform,
-        metadata: { style }
+        metadata: { style, language, persona }
       });
 
       // Increment usage
@@ -557,6 +559,66 @@ export default function Dashboard() {
                     </Select>
                   </div>
                   <div className="space-y-2">
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label className="flex items-center gap-2">
+                      🌍 Language
+                    </Label>
+                    <Select value={language} onValueChange={setLanguage}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="english">English</SelectItem>
+                        <SelectItem value="spanish">Español</SelectItem>
+                        <SelectItem value="french">Français</SelectItem>
+                        <SelectItem value="german">Deutsch</SelectItem>
+                        <SelectItem value="portuguese">Português</SelectItem>
+                        <SelectItem value="italian">Italiano</SelectItem>
+                        <SelectItem value="russian">Русский</SelectItem>
+                        <SelectItem value="japanese">日本語</SelectItem>
+                        <SelectItem value="korean">한국어</SelectItem>
+                        <SelectItem value="chinese">中文</SelectItem>
+                        <SelectItem value="arabic">العربية</SelectItem>
+                        <SelectItem value="hindi">हिन्दी</SelectItem>
+                        <SelectItem value="urdu">اردو</SelectItem>
+                        <SelectItem value="turkish">Türkçe</SelectItem>
+                        <SelectItem value="dutch">Nederlands</SelectItem>
+                        <SelectItem value="polish">Polski</SelectItem>
+                        <SelectItem value="vietnamese">Tiếng Việt</SelectItem>
+                        <SelectItem value="thai">ไทย</SelectItem>
+                        <SelectItem value="indonesian">Bahasa Indonesia</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="flex items-center gap-2">
+                      👤 Persona Style
+                    </Label>
+                    <Select value={persona} onValueChange={setPersona}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">No Persona</SelectItem>
+                        <SelectItem value="mrbeast">MrBeast Style</SelectItem>
+                        <SelectItem value="mkbhd">MKBHD Style</SelectItem>
+                        <SelectItem value="veritasium">Veritasium Style</SelectItem>
+                        <SelectItem value="pewdiepie">PewDiePie Style</SelectItem>
+                        <SelectItem value="casey">Casey Neistat Style</SelectItem>
+                        <SelectItem value="linus">Linus Tech Tips Style</SelectItem>
+                        <SelectItem value="vsauce">Vsauce Style</SelectItem>
+                        <SelectItem value="kurzgesagt">Kurzgesagt Style</SelectItem>
+                        <SelectItem value="cocomelon">CoComelon Style</SelectItem>
+                        <SelectItem value="dude_perfect">Dude Perfect Style</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
                     <Label>Style</Label>
                     <Select value={style} onValueChange={setStyle}>
                       <SelectTrigger>
