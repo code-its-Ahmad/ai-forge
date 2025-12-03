@@ -193,7 +193,7 @@ The thumbnail should make viewers WANT to click immediately.`;
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'google/gemini-2.5-flash-image-preview',
+        model: 'google/gemini-3-pro-image-preview',
         messages: [
           { role: 'user', content: enhancedPrompt }
         ],
@@ -237,7 +237,7 @@ The thumbnail should make viewers WANT to click immediately.`;
       style,
       language,
       persona,
-      model: 'gemini-2.5-flash-image-preview',
+      model: 'gemini-3-pro-image-preview',
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
