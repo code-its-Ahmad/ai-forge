@@ -13,6 +13,7 @@ import { YouTubeAnalyzer } from '@/components/dashboard/YouTubeAnalyzer';
 import { ThumbnailScorer } from '@/components/dashboard/ThumbnailScorer';
 import { ABTester } from '@/components/dashboard/ABTester';
 import { AdvancedImageEditor } from '@/components/dashboard/AdvancedImageEditor';
+import { YouTubeToThumbnail } from '@/components/dashboard/YouTubeToThumbnail';
 import { toast } from 'sonner';
 import { 
   Sparkles, 
@@ -813,158 +814,12 @@ export default function Dashboard() {
 
           {/* YouTube to Thumbnail */}
           <TabsContent value="youtube-gen" className="space-y-6">
-            <div className="grid lg:grid-cols-2 gap-6">
-              <div className="glass rounded-2xl p-6 space-y-4">
-                <h2 className="font-display text-xl font-semibold flex items-center gap-2">
-                  <Link2 className="w-5 h-5 text-primary" />
-                  Generate from YouTube Link
-                </h2>
-                <p className="text-sm text-muted-foreground">
-                  Paste any YouTube URL and we'll analyze the current thumbnail, then generate an improved version with matching titles.
-                </p>
-
-                <div className="space-y-2">
-                  <Label>YouTube Video URL</Label>
-                  <Input
-                    placeholder="https://youtube.com/watch?v=... or https://youtu.be/..."
-                    value={youtubeUrl}
-                    onChange={(e) => setYoutubeUrl(e.target.value)}
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Style</Label>
-                  <Select value={style} onValueChange={setStyle}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="professional">Professional</SelectItem>
-                      <SelectItem value="bold">Bold & Dramatic</SelectItem>
-                      <SelectItem value="minimal">Minimal</SelectItem>
-                      <SelectItem value="gaming">Gaming</SelectItem>
-                      <SelectItem value="cinematic">Cinematic</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <Button 
-                  onClick={handleGenerateFromYouTube}
-                  variant="mint"
-                  className="w-full"
-                  size="lg"
-                  disabled={generatingFromYT}
-                >
-                  {generatingFromYT ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      Analyzing & Generating...
-                    </>
-                  ) : (
-                    <>
-                      <Sparkles className="w-4 h-4" />
-                      Generate Better Thumbnail
-                    </>
-                  )}
-                </Button>
-              </div>
-
-              {/* Results */}
-              <div className="space-y-4">
-                {ytResult && (
-                  <>
-                    {/* Before/After */}
-                    <div className="glass rounded-2xl p-6">
-                      <h3 className="font-display text-lg font-semibold mb-4">Before & After</h3>
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <p className="text-xs text-muted-foreground mb-2">Original</p>
-                          <div className="aspect-video rounded-lg overflow-hidden bg-surface-2">
-                            <img src={ytResult.originalThumbnail} alt="Original" className="w-full h-full object-cover" />
-                          </div>
-                        </div>
-                        <div>
-                          <p className="text-xs text-muted-foreground mb-2">AI Generated</p>
-                          <div className="aspect-video rounded-lg overflow-hidden bg-surface-2">
-                            {ytResult.generatedThumbnail ? (
-                              <img src={ytResult.generatedThumbnail} alt="Generated" className="w-full h-full object-cover" />
-                            ) : (
-                              <div className="flex items-center justify-center h-full text-muted-foreground">
-                                No image generated
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                      {ytResult.generatedThumbnail && (
-                        <div className="flex gap-2 mt-4">
-                          <Button 
-                            onClick={() => handleDownload(ytResult.generatedThumbnail)}
-                            variant="outline"
-                            className="flex-1"
-                          >
-                            <Download className="w-4 h-4 mr-2" />
-                            Download New
-                          </Button>
-                          <Button 
-                            onClick={() => useImageForEdit(ytResult.generatedThumbnail)}
-                            variant="outline"
-                            className="flex-1"
-                          >
-                            <Palette className="w-4 h-4 mr-2" />
-                            Edit
-                          </Button>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Analysis */}
-                    {ytResult.analysis && (
-                      <div className="glass rounded-2xl p-6">
-                        <h3 className="font-display text-lg font-semibold mb-3">Video Analysis</h3>
-                        <p className="text-sm"><strong>Topic:</strong> {ytResult.analysis.videoTopic}</p>
-                        {ytResult.analysis.improvedConcept && (
-                          <p className="text-sm mt-2"><strong>Improvement:</strong> {ytResult.analysis.improvedConcept}</p>
-                        )}
-                      </div>
-                    )}
-
-                    {/* Generated Titles */}
-                    {ytResult.titles && ytResult.titles.length > 0 && (
-                      <div className="glass rounded-2xl p-6">
-                        <h3 className="font-display text-lg font-semibold mb-3">Suggested Titles</h3>
-                        <div className="space-y-2">
-                          {ytResult.titles.map((item: any, i: number) => (
-                            <div key={i} className="p-3 rounded-lg bg-surface-2 flex items-center justify-between group">
-                              <div>
-                                <p className="text-sm font-medium">{item.title}</p>
-                                <span className={`text-xs px-2 py-0.5 rounded-full ${
-                                  item.estimatedCTR === 'high' ? 'bg-green-500/20 text-green-400' :
-                                  item.estimatedCTR === 'medium' ? 'bg-yellow-500/20 text-yellow-400' :
-                                  'bg-muted text-muted-foreground'
-                                }`}>
-                                  {item.estimatedCTR} CTR
-                                </span>
-                              </div>
-                              <Button size="sm" variant="ghost" onClick={() => handleCopyTitle(item.title)}>
-                                <Copy className="w-4 h-4" />
-                              </Button>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </>
-                )}
-
-                {!ytResult && !generatingFromYT && (
-                  <div className="glass rounded-2xl p-6 text-center">
-                    <Youtube className="w-16 h-16 mx-auto mb-4 text-muted-foreground opacity-30" />
-                    <p className="text-muted-foreground">Enter a YouTube URL to generate an improved thumbnail</p>
-                  </div>
-                )}
-              </div>
-            </div>
+            <YouTubeToThumbnail 
+              onUseForEdit={useImageForEdit}
+              userId={user!.id}
+              onRefreshProfile={refreshProfile}
+              onFetchGenerations={fetchGenerations}
+            />
           </TabsContent>
 
           {/* Title Generation */}
