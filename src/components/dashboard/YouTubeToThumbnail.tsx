@@ -160,8 +160,39 @@ export function YouTubeToThumbnail({
         }
       });
 
-      if (error) throw error;
-      if (data.error) throw new Error(data.error);
+      // Handle edge function errors properly
+      if (error) {
+        // Extract error details from FunctionsHttpError
+        const errorBody = error.context?.body ? JSON.parse(error.context.body) : null;
+        const statusCode = error.context?.status || (error as any).status;
+        const errorMessage = errorBody?.error || error.message || 'Unknown error';
+        
+        if (statusCode === 402 || errorMessage.toLowerCase().includes('usage limit') || errorMessage.toLowerCase().includes('credit')) {
+          toast.error('You\'ve run out of AI credits. Please add more credits in Settings → Workspace → Usage to continue generating.', {
+            duration: 8000,
+          });
+          return;
+        } else if (statusCode === 429 || errorMessage.toLowerCase().includes('rate limit')) {
+          toast.error('Too many requests. Please wait a moment and try again.', { duration: 5000 });
+          return;
+        } else {
+          toast.error(errorMessage || 'Failed to generate thumbnail. Please try again.');
+          return;
+        }
+      }
+      
+      // Handle error in response body
+      if (data?.error) {
+        const errorMsg = data.error.toLowerCase();
+        if (errorMsg.includes('usage limit') || errorMsg.includes('credit') || errorMsg.includes('payment')) {
+          toast.error('You\'ve run out of AI credits. Please add more credits in Settings → Workspace → Usage to continue generating.', {
+            duration: 8000,
+          });
+          return;
+        }
+        toast.error(data.error);
+        return;
+      }
 
       setResult(data);
       setSelectedThumbnail(0);
@@ -192,30 +223,7 @@ export function YouTubeToThumbnail({
       toast.success('Thumbnails generated successfully!');
     } catch (error: any) {
       console.error('Error generating from YouTube:', error);
-      
-      // Handle specific error types with user-friendly messages
-      const errorMessage = error?.message || '';
-      const statusCode = error?.status || error?.code;
-      
-      if (statusCode === 402 || errorMessage.toLowerCase().includes('usage limit') || errorMessage.toLowerCase().includes('credit')) {
-        toast.error('You\'ve run out of AI credits. Please add more credits in Settings → Workspace → Usage to continue generating.', {
-          duration: 8000,
-          action: {
-            label: 'View Settings',
-            onClick: () => window.open('/settings', '_blank')
-          }
-        });
-      } else if (statusCode === 429 || errorMessage.toLowerCase().includes('rate limit') || errorMessage.toLowerCase().includes('too many requests')) {
-        toast.error('Too many requests. Please wait a moment and try again.', {
-          duration: 5000
-        });
-      } else if (errorMessage.toLowerCase().includes('api key') || errorMessage.toLowerCase().includes('unauthorized')) {
-        toast.error('Service configuration error. Please contact support.', {
-          duration: 5000
-        });
-      } else {
-        toast.error(errorMessage || 'Failed to generate thumbnail. Please try again.');
-      }
+      toast.error(error?.message || 'Failed to generate thumbnail. Please try again.');
     } finally {
       setGenerating(false);
     }
