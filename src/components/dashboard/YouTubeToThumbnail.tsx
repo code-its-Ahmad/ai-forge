@@ -190,9 +190,32 @@ export function YouTubeToThumbnail({
       }
 
       toast.success('Thumbnails generated successfully!');
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error generating from YouTube:', error);
-      toast.error(error instanceof Error ? error.message : 'Failed to generate');
+      
+      // Handle specific error types with user-friendly messages
+      const errorMessage = error?.message || '';
+      const statusCode = error?.status || error?.code;
+      
+      if (statusCode === 402 || errorMessage.toLowerCase().includes('usage limit') || errorMessage.toLowerCase().includes('credit')) {
+        toast.error('You\'ve run out of AI credits. Please add more credits in Settings → Workspace → Usage to continue generating.', {
+          duration: 8000,
+          action: {
+            label: 'View Settings',
+            onClick: () => window.open('/settings', '_blank')
+          }
+        });
+      } else if (statusCode === 429 || errorMessage.toLowerCase().includes('rate limit') || errorMessage.toLowerCase().includes('too many requests')) {
+        toast.error('Too many requests. Please wait a moment and try again.', {
+          duration: 5000
+        });
+      } else if (errorMessage.toLowerCase().includes('api key') || errorMessage.toLowerCase().includes('unauthorized')) {
+        toast.error('Service configuration error. Please contact support.', {
+          duration: 5000
+        });
+      } else {
+        toast.error(errorMessage || 'Failed to generate thumbnail. Please try again.');
+      }
     } finally {
       setGenerating(false);
     }
